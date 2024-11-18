@@ -27,7 +27,7 @@ def create_df(ticker, start_date, end_date):
         data.to_csv(file_path)
 
     df = pd.read_csv(file_path, parse_dates=True, index_col="Date")
-    df = df.filter('Adj Close')
+    #df = df.filter('Adj Close')
 
     # using backwards fill to fill in missing data to prevent any bias from using prediction
     df.bfill(inplace=True)
