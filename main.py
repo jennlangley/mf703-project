@@ -27,9 +27,13 @@ def create_df(ticker, start_date, end_date):
         data.to_csv(file_path)
 
     df = pd.read_csv(file_path, parse_dates=True, index_col="Date")
+    df = df.filter('Adj Close')
+
     # using backwards fill to fill in missing data to prevent any bias from using prediction
     df.bfill(inplace=True)
+    return df
 
+def create_model(df):
     # Add lag
     df['Lag1'] = df['Adj Close'].shift(1)
     df['Lag2'] = df['Adj Close'].shift(2)
@@ -37,15 +41,53 @@ def create_df(ticker, start_date, end_date):
     # Simple Moving Averge
     df['SMA_1'] = df['Adj Close'].rolling(window=1).mean()
     # Add target variable
-    df['Next Close'] = df['Close'].shift(-1)
+    df['Next Close'] = df['Adj Close'].shift(-1)
     df.dropna(inplace=True)
     features = ['Adj Close', 'Lag1', 'Lag2', 'Lag3', 'SMA_1']
-    X = data[features]
-    Y = data['Next Close']
+    X = df[features]
+    Y = df['Next Close']
 
-    # Scale the features
-    scaler = sklearn.StandardScaler()
+    # Normalize the data
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
 
+    # Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, Y, test_size=0.2, shuffle=False)
+
+    # Define and train the model
+    model = tf.keras.Sequential([
+        tf.keras.layers.Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
+        tf.keras.layers.Dense(32, activation='relu'),
+        tf.keras.layers.Dense(1)
+    ])
+
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.1), loss='mean_squared_error')
+    history = model.fit(X_train, y_train, epochs=10, validation_split=0.1, verbose=0)
+
+    # Predict on the full dataset
+    df['Predicted Close'] = model.predict(X_scaled)
+
+    # Forecast the next day's closing price
+    latest_data = df[features].iloc[-1].values.reshape(1, -1)  # Use the last row of data as input
+    latest_data_scaled = scaler.transform(latest_data)  # Scale the data
+    next_day_prediction = model.predict(latest_data_scaled)
+
+    # Print the last known close price, predicted close price, and next day forecast
+    print(f"Last Known Closing Price: ${df['Adj Close'].iloc[-1]:.2f}")
+    print(f"Last Predicted Closing Price: ${df['Predicted Close'].iloc[-1]:.2f}")
+    print(f"Next Day Forecasted Closing Price: ${next_day_prediction[0][0]:.2f}")
+    return df
+
+def plot_actual_vs_predicted(df):
+    plt.figure(figsize=(14, 7))
+    plt.plot(df.index, df['Adj Close'], label='Actual Close', color='blue')
+    plt.plot(df.index, df['Predicted Close'], label='Predicted Close', color='red')
+    plt.title('Actual vs Predicted Closing Price')
+    plt.xlabel('Date')
+    plt.ylabel('Price (USD)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -53,4 +95,10 @@ if __name__ == "__main__":
     end_date = "2024-01-01"
     ticker = 'RUT'
     data = create_df(ticker, start_date, end_date)
-    print(data.head())
+    model = create_model(data)
+    plot_actual_vs_predicted(model)
+
+
+    data = create_df('SPY', start_date, end_date)
+    model = create_model(data)
+    plot_actual_vs_predicted(model)
