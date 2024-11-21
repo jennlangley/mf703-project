@@ -35,15 +35,15 @@ def create_df(ticker, start_date, end_date):
 
 def create_model(df):
     # Add lag
-    df['Lag1'] = df['Adj Close'].shift(1)
-    df['Lag2'] = df['Adj Close'].shift(2)
-    df['Lag3'] = df['Adj Close'].shift(3)
+    df['Lag1'] = df['Adj Close'].shift(1) # previous day's price
+    df['Lag5'] = df['Adj Close'].shift(5) # 5 days ago price
+    df['Lag20'] = df['Adj Close'].shift(20) # previous month's price
     # Simple Moving Averge
-    df['SMA_1'] = df['Adj Close'].rolling(window=1).mean()
+    df['SMA_20'] = df['Adj Close'].rolling(window=20).mean() # 20 day window for monthly stocks, 100 could be window for ETFs
     # Add target variable
-    df['Next Close'] = df['Adj Close'].shift(-1)
+    df['Next Close'] = df['Adj Close'].shift(-1) # creates next close price
     df.dropna(inplace=True)
-    features = ['Adj Close', 'Lag1', 'Lag2', 'Lag3', 'SMA_1']
+    features = ['Adj Close', 'Lag1', 'Lag5', 'Lag20', 'SMA_20']
     X = df[features]
     Y = df['Next Close']
 
@@ -51,7 +51,7 @@ def create_model(df):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Split data into training and testing sets
+    # Split data into training and testing sets 80% train, 20% test
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, Y, test_size=0.2, shuffle=False)
 
     # Define and train the model
@@ -62,7 +62,7 @@ def create_model(df):
     ])
 
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.1), loss='mean_squared_error')
-    history = model.fit(X_train, y_train, epochs=10, validation_split=0.1, verbose=0)
+    history = model.fit(X_train, y_train, epochs=10, validation_split=0.1, verbose=0) # preserves 10% of data for validation
 
     # Predict on the full dataset
     df['Predicted Close'] = model.predict(X_scaled)
