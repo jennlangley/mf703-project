@@ -18,10 +18,34 @@ import matplotlib.pyplot as plt
 def download_data(tickers, start_date, end_date):
     try:
         data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+        data.index = data.index.tz_localize(None) # Accounts for different timezones in yf data and ff data
         return data.dropna(axis=0)  # Drop rows with missing data
     except Exception as e:
         print(f"Error downloading data: {e}")
         return pd.DataFrame()
+
+def load_risk_free_rate(file_path):
+    try:
+        ff_data = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date')
+        ff_data.index = ff_data.index.tz_localize(None)
+        risk_free_df = ff_data['RF'] / 100
+        return risk_free_df
+    except Exception as e:
+        print(f"Error loading risk-free rate data: {e}")
+        return pd.Series()
+
+def merge_data_with_rf(asset_data, risk_free_data):
+    try:
+        merged_data = asset_data.merge(risk_free_data, left_index=True, right_index=True, how='inner')
+        return merged_data
+    except Exception as e:
+        print(f"Error merging data: {e}")
+        return pd.DataFrame()
+
+def calculate_excess_returns(merged_data):
+    returns = merged_data[merged_data.columns[:-1]].pct_change().dropna()
+    excess_returns = returns.sub(merged_data['RF'], axis=0)  # Subtract risk-free rate row-wise
+    return excess_returns
 
 # Monte Carlo Simulation for Portfolio Optimization
 def simulate_portfolios(data, num_portfolios=100000, risk_free_rate=0.0, allow_short=False):
@@ -106,16 +130,35 @@ def calculate_metrics(weights, returns, cov_matrix, risk_free_rate, actual_price
 def calculate_cagr(initial_value, final_value, years):
     return (final_value / initial_value) ** (1 / years) - 1
 
+def calculate_daily_portfolio_returns(test_data, weights):
+    daily_returns = test_data.pct_change().dropna()
+    portfolio_returns = daily_returns @ weights
+    return portfolio_returns
+
+def calculate_cumulative_returns(daily_returns):
+    return (1 + daily_returns).cumprod()
+
+def get_sp500_data(start_date, end_date):
+    sp500 = yf.download('^GSPC', start=start_date, end=end_date)['Adj Close']
+    sp500_returns = sp500.pct_change().dropna()
+    sp500_cumulative_returns = (1 + sp500_returns).cumprod()
+    return sp500_cumulative_returns
+
 # Main script
 def main():
     # Step 1: Define tickers and download data
-    tickers = ['GLD','SLV', 'WEAT', 'IWM', 'QQQ']
+    tickers = ['GLD','TLT', 'EFA', 'QQQ', 'VNQ']
     print("Downloading data for selected assets...")
-    data = download_data(tickers, start_date='2010-01-01', end_date='2023-01-01')
+    data = download_data(tickers, start_date='2000-01-01', end_date='2023-01-01')
 
     if data.empty:
         print("No valid data downloaded. Exiting.")
         return
+
+    # Download risk free rate from Fama-French data
+    risk_free_data = load_risk_free_rate('F-F_Research_Data_Factors_daily.csv')
+    merged_data = merge_data_with_rf(data, risk_free_data)
+    excess_returns = calculate_excess_returns(merged_data).dropna()
 
     # Step 2: Split into training (2010-2020) and testing (2021-2023)
     train_data = data.loc[:'2020-12-31']
@@ -160,8 +203,14 @@ def main():
         rebalanced_weights['GRU'].append(np.mean(gru_weights))
 
     # Normalize weights
-    rebalanced_weights['LSTM'] /= np.sum(rebalanced_weights['LSTM'])
-    rebalanced_weights['GRU'] /= np.sum(rebalanced_weights['GRU'])
+    rebalanced_weights['LSTM'] /= np.sum(np.abs(rebalanced_weights['LSTM']))
+    rebalanced_weights['GRU'] /= np.sum(np.abs(rebalanced_weights['GRU']))
+
+    print("\nOptimal Portfolio Weights from LSTM Model:")
+    print(rebalanced_weights['LSTM'])
+
+    print("\nOptimal Portfolio Weights from GRU Model:")
+    print(rebalanced_weights['GRU'])
 
     # Step 5: Evaluate performance on test data
     test_returns = test_data.pct_change().mean() * 252
@@ -176,8 +225,31 @@ def main():
         final_value = initial_value * (1 + sharpe_ratio)  # This is a simplification for CAGR calculation
         years = 3  # Period from 2021 to 2023
         cagr = calculate_cagr(initial_value, final_value, years)
-        
         print(f"{method}: Sharpe Ratio = {sharpe_ratio:.2f}, Max Drawdown = {drawdown:.2f}, MSE = {mse:.2f}, CAGR = {cagr:.2%}")
+
+    # Step 6: Backtest Portfolio Performance
+    print("\nBacktesting Portfolio Performance...")
+
+    # Calculate portfolio returns for each strategy
+    backtest_results = {}
+    for method, weights in {'MPT': optimal_weights_mpt, **rebalanced_weights}.items():
+        portfolio_returns = calculate_daily_portfolio_returns(test_data, weights)
+        backtest_results[method] = calculate_cumulative_returns(portfolio_returns)
+
+    # Get S&P 500 cumulative returns for comparison
+    sp500_cumulative_returns = get_sp500_data(start_date='2021-01-01', end_date='2023-01-01')
+
+    # Plot cumulative returns for portfolio strategies and benchmark
+    plt.figure(figsize=(12, 6))
+    for method, cumulative_returns in backtest_results.items():
+        plt.plot(cumulative_returns, label=f'{method} Portfolio')
+    plt.plot(sp500_cumulative_returns, label='S&P 500', linestyle='--', color='orange')
+    plt.title('Backtest: Growth of $1')
+    plt.xlabel('Date')
+    plt.ylabel('Cumulative Return')
+    plt.legend()
+    plt.grid()
+    plt.show()
 
 if __name__ == "__main__":
     main()
