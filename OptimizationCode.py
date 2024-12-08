@@ -48,7 +48,7 @@ def calculate_excess_returns(merged_data):
     return excess_returns
 
 # Monte Carlo Simulation for Portfolio Optimization
-def simulate_portfolios(data, num_portfolios=100000, risk_free_rate=0.0, allow_short=False):
+def simulate_portfolios(data, num_portfolios=100000, risk_free_rate=0.04, allow_short=False):
     returns = data.pct_change().mean() * 252  # Annualized returns
     cov_matrix = data.pct_change().cov() * 252  # Annualized covariance
     results = np.zeros((3, num_portfolios))
@@ -114,7 +114,7 @@ def build_and_train_model(X_train, y_train, model_type='LSTM'):
         Dense(units=1)
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
-    model.fit(X_train, y_train, epochs=20, batch_size=32, verbose=0)
+    model.fit(X_train, y_train, epochs=20, batch_size=21, verbose=0)
     return model
 
 # Calculate performance metrics (Sharpe Ratio, Max Drawdown, MSE)
@@ -147,7 +147,7 @@ def get_sp500_data(start_date, end_date):
 # Main script
 def main():
     # Step 1: Define tickers and download data
-    tickers = ['GLD','TLT', 'EFA', 'QQQ', 'VNQ']
+    tickers = ['GLD', 'TLT', 'EFA', 'QQQ', 'VNQ']
     print("Downloading data for selected assets...")
     data = download_data(tickers, start_date='2000-01-01', end_date='2023-01-01')
 
@@ -160,7 +160,7 @@ def main():
     merged_data = merge_data_with_rf(data, risk_free_data)
     excess_returns = calculate_excess_returns(merged_data).dropna()
 
-    # Step 2: Split into training (2010-2020) and testing (2021-2023)
+    # Step 2: Split into training (2000-2020) and testing (2021-2023)
     train_data = data.loc[:'2020-12-31']
     test_data = data.loc['2021-01-01':]
 
@@ -203,14 +203,12 @@ def main():
         rebalanced_weights['GRU'].append(np.mean(gru_weights))
 
     # Normalize weights
-    rebalanced_weights['LSTM'] /= np.sum(np.abs(rebalanced_weights['LSTM']))
-    rebalanced_weights['GRU'] /= np.sum(np.abs(rebalanced_weights['GRU']))
+    rebalanced_weights['LSTM'] /= np.sum((rebalanced_weights['LSTM']))
+    rebalanced_weights['GRU'] /= np.sum((rebalanced_weights['GRU']))
 
-    print("\nOptimal Portfolio Weights from LSTM Model:")
-    print(rebalanced_weights['LSTM'])
-
-    print("\nOptimal Portfolio Weights from GRU Model:")
-    print(rebalanced_weights['GRU'])
+    print("\nNormalized LSTM Weights:", rebalanced_weights['LSTM'])
+    print("Normalized GRU Weights:", rebalanced_weights['GRU'])
+    # Adjust predictions to allow for short positions
 
     # Step 5: Evaluate performance on test data
     test_returns = test_data.pct_change().mean() * 252
@@ -225,6 +223,7 @@ def main():
         final_value = initial_value * (1 + sharpe_ratio)  # This is a simplification for CAGR calculation
         years = 3  # Period from 2021 to 2023
         cagr = calculate_cagr(initial_value, final_value, years)
+
         print(f"{method}: Sharpe Ratio = {sharpe_ratio:.2f}, Max Drawdown = {drawdown:.2f}, MSE = {mse:.2f}, CAGR = {cagr:.2%}")
 
     # Step 6: Backtest Portfolio Performance
