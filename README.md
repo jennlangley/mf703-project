@@ -1,5 +1,5 @@
 
-# Credit-Driven Portfolio Optimization with MPT, LSTM, and GRU
+# Portfolio Optimization with MPT, LSTM, and GRU
 
 This project implements a hybrid approach to portfolio optimization using both Modern Portfolio Theory (MPT) and deep learning techniques (LSTM and GRU). It combines traditional Monte Carlo simulation for risk-return tradeoff with neural networks to adaptively rebalance portfolio weights based on time-series forecasting.
 
@@ -48,8 +48,6 @@ To execute the full pipeline:
 ```bash
 python main.py
 ```
-
-Make sure `F-F_Research_Data_Factors_daily.csv` is present in the project directory for risk-free rate data.
 
 ## Acknowledgments
 
