@@ -156,7 +156,7 @@ def main():
         return
 
     # Download risk free rate from Fama-French data
-    risk_free_data = load_risk_free_rate('F-F_Research_Data_Factors_daily.csv')
+    risk_free_data = load_risk_free_rate('./data/F-F_Research_Data_Factors_daily.csv')
     merged_data = merge_data_with_rf(data, risk_free_data)
     excess_returns = calculate_excess_returns(merged_data).dropna()
 
